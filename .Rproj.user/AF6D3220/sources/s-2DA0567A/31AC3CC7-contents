@@ -1,0 +1,299 @@
+---
+title: "Contact Crime Excess"
+author: "Andrew Fraser"
+date: "13/09/2021"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    fig_width: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Contact Crimes and COVID NPIs
+
+Monthly South African crime statistics are released by SAPS on a quarterly basis. The latest quarterly statistics includes data for crimes reported up until end June 2021. This dataset includes complete monthly crime reporting data from January 2016 and includes data by crime reports by crime categories, province, district and police station. When looking at the aggregated reported crimes per month, it is clear that the COVID pandemic and mitigation interventions has had an impact on crime patterns.
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8, message=FALSE, warnings=FALSE}
+
+source("build_crime_summary1.R")
+overall_plot <- ggplot(crime_2016_2021_summary_za, 
+       aes(x= month_year, 
+           y = crimes_reported, 
+           fill = `Crime type`, colour = `Crime type`))+
+  geom_area(alpha = 0.5, size =0.2)+
+  scale_fill_viridis_d(option = "D")+
+  scale_colour_viridis_d(option = "D")+
+  theme_minimal()+
+  labs(title = "South Africa Crime Statistics Jan 2016 - Jun 2021",
+       subtitle = "Monthly count of crimes reported",
+       caption = "SAPS Quarterly crime statistics\nhttps://www.saps.gov.za/services/crimestats.php")+
+  xlab("Month")+
+  ylab("Count of crimes reported")+
+  theme(plot.caption = element_text(hjust = 0))
+
+print(overall_plot)
+```
+
+## Contact crimes
+
+The reduction of contact crimes during the lockdown of March and April 2020 is significant, and the various categories showed similar reductions.
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8, message=FALSE, warnings=FALSE}
+source("build_crime_summary1.R")
+
+ggplot(contact_crime_2016_2021_summary_za, 
+       aes(x= month_year, 
+           y = crimes_reported, 
+           fill = `Crime category`, colour = `Crime category`, 
+           ))+
+  geom_area(position = "stack", alpha = 0.9, size =0.1)+
+  scale_fill_viridis_d(option = "D")+
+  scale_colour_viridis_d(option = "D")+
+  theme_minimal()+
+  labs(title = "South Africa Crime Statistics Jan 2016 - Jun 2021",
+       subtitle = "Monthly count of contact crimes reported",
+       caption = "SAPS Quarterly crime statistics\nhttps://www.saps.gov.za/services/crimestats.php")+
+  xlab("Month")+
+  ylab("Count of crimes reported")+
+  theme(legend.position = "bottom", legend.text=element_text(size= rel(0.5)), legend.title =element_blank(), plot.caption = element_text(hjust = 0))
+```
+
+\pagebreak
+
+## Estimating the impact of COVID on contact crimes reported.
+
+The count of contact crimes reported by month during the period 2016-2019 shows definite seasonality, and it is therefore possible to create a model that takes into account that seasonality and fits the observed data fairly closely.
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8, message=FALSE, warnings=FALSE}
+source("build_crime_summary1.R")
+##plot fit
+fit_plot <- ggplot(augment(contact_crimes_za_fitted), aes(x = month_year))+
+  geom_path(aes(y= contact_crimes_reported, colour = "Data"), size =1, alpha =0.9)+
+  geom_path(aes(y= .fitted, colour = "Fitted"), size = 1, alpha = 0.9)+
+  labs(title = "South Africa: Contact crimes 2016-2019",
+         subtitle = "ETS (M,N,M) model fit",
+         caption = "SAPS Quarterly crime statistics\nhttps://www.saps.gov.za/services/crimestats.php")+
+  xlab("Month")+
+  ylab("Count of crimes reported")+
+  theme_minimal()+scale_colour_viridis_d(option = "D",end = 0.7 )+
+  theme(plot.caption = element_text(hjust = 0))
+
+print(fit_plot)
+```
+
+\pagebreak
+
+### Prediction
+
+From this fitted model a forecast/prediction for the period January 2020 to June 2021 can be built.
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8, message=FALSE, warnings=FALSE}
+source("build_crime_summary1.R")
+ autoplot( forecast_contact_crimes_za,contact_crimes_tsibble_za)+
+   labs(title ="Count of Contact Crimes Reported: South Africa, Jan 2016 - Jun 2021",
+       subtitle = "Actual versus Prediction",
+       caption = "SAPS Quarterly crime statistics\nhttps://www.saps.gov.za/services/crimestats.php")+
+   theme_minimal()+
+   theme(plot.caption = element_text(hjust = 0))
+```
+
+\pagebreak
+
+## Calculating "Excess" contact crimes
+
+The differences between the actual crimes reported for 2020 and 2021 and the mean prediction can be set as an "excess" of reports (i.e., how many more or fewer crimes were reported than predicted)
+
+```{r gt table1, fig.width=8, message=FALSE, warning=FALSE,echo = FALSE, paged.print=TRUE, results='asis'}
+
+source("build_crime_summary1.R")
+
+library(flextable)
+
+contact_crimes_excess %>% 
+  select(month_year, contact_crimes_reported, prediction, excess, excess_upper_bound, excess_lower_bound) %>% 
+  rename(crimes_reported = contact_crimes_reported) %>% 
+  flextable() %>% 
+  add_header_lines("South Africa Contact Crimes: Excess versus Predicted values Jan 2020 - Jun 2021" ) %>% 
+  add_footer_lines("Source: SAPS Quarterly crime statistics\nhttps://www.saps.gov.za/services/crimestats.php") %>% 
+  add_footer_lines("Prediction based on ETS(M,N,M) model fit of crime reports 2016 - 2019") %>% 
+  autofit(add_w = 0.3, add_h = 0.0, part = c("body"))
+
+
+
+
+```
+
+\pagebreak
+
+## Creating metrics for COVID restrictions and observed impacts.
+
+Various lockdown stages and associated restrictions were applied across the entire year, and in order to examine their relation to crime reporting, it is necessary to normalise the time period and to standardise their severity ((i.e. to apply the different measures that were applied on portions of months to a mean for the complete month in order to compare different periods)
+
+## Alcohol restrictions
+
+In order to do this, alcohol restrictions have been divided into two basic types: a. *Off-sales* restrictions, and, b. *On-premise* restrictions.
+
+*Off-sales* restrictions relate to sales through retail outlets, and the severity of the restrictions is measured by the permitted hours of sales divided by the potential hours of sales should there be no (additional to normal licensing laws) restrictions. The assumption is made that off-sales hours in a normally licensed period would be a maximum of 12 hours per day, for six days per week (i.e. Monday to Saturday 08h00 \~ 20h00). This is likely erring on the upside, and may understate the impact of COVID alcohol restrictions on contact crimes reported.
+
+*On-premise* restrictions relate to sales through outlets where the alcohol is consumed on-site (e.g. bars, restaurants, etc.) The assumption is made that the normally licensed period would be a maximum of 16 hours per day, for seven days per week (i.e. Monday to Sunday, 10h00 \~ 02h00). Again, this is likely erring on the upside, as the majority of outlets would have significantly shorter hours/days of trade. Again, this may understate the impact of COVID alcohol restrictions.
+
+In addition, since the crime data are monthly, it is not possible to measure any impact of the COVID restrictions by day or week. In particular, it is not possible to measure any kind of "weekend-effect".
+
+An overall restriction index can be built by combining and weighting the on-premise and off-sale indices by their estimated proportion of the market (using 2018 market data by Euromonitor)
+
+\pagebreak
+
+```{r gt table,fig.width=8, message=FALSE, warning=FALSE,echo = FALSE}
+        source("restrictions_2.R")
+        library(flextable)
+        restrictions_2020 %>% 
+          flextable() %>% 
+          add_header_lines( values = "Govt mandated COVID restrictions. Monthly stringency indices.") %>% 
+          add_footer_lines( values = "0 - No restriction, 1 - Full ban.") %>% 
+          autofit(add_w = 0.3, add_h = 0.0, part = c("body"))
+           
+
+```
+
+\pagebreak
+
+## Mobility
+
+The use of lockdowns and curfews to reduce mobility allows the creation of a *curfew severity index*. This is simply calculated by the proportion of restricted hours per day, averaged over the month.
+
+An alternate method of measuring mobility is to use Google's mobility data. Using data from mobile phones, Google supplies mobility data for many regions in the world. These are in the form of percentage change from a baseline in early 2020 (prior to COVID restrictions). These are supplied on a daily basis, and it is necessary to normalise them by month. This is done by simply taking the mean for the month and converting the percentage to a simple index between -1 and 1)
+
+```{r echo=FALSE, error=FALSE, fig.height=6, message=FALSE, warnings=FALSE}
+source("google_mobility_.r")
+google_mobility2 <- dplyr::filter(google_mobility, iso_3166_2_code == "ZA-Nat" & as.Date(month_year) < "2021-07-01")
+google_mobility_long_za <-  google_mobility2%>% 
+  pivot_longer(cols= c(google_retail_and_recreation, 
+                       google_grocery_and_pharmacy, 
+                       google_parks,
+                       google_transit_and_stations,
+                       google_workplace,
+                       google_residential),
+               names_to = "Google mobility category", values_to = "Index of mobility")
+
+ggplot(google_mobility_long_za, aes(x= month_year, 
+                                    y=`Index of mobility`, 
+                                    colour = `Google mobility category` ))+
+  geom_path(size = 1, alpha = 0.8)+
+  scale_colour_viridis_d(option = "D", begin = 0.0, end = 0.9 )+
+  theme_minimal()+
+  labs(title = "Google mobility measures, mean monthly index: South Africa,\nFeb 2020 - Jun 2021",
+       subtitle = "Google mobility index is based on a baseline of median mobility between 3 Jan – 6 Feb 2020. ",
+       caption = "Source: https://www.google.com/covid19/mobility/")+
+  xlab("month")+
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.caption = element_text(hjust = 0), legend.text = element_text(size = rel(0.5)))
+```
+
+\pagebreak
+
+## Correlation between restrictions and contact crime "excess" reports.
+
+There are strong negative correlations between the alcohol restriction indices and the "excess" contact crimes reports during this period, and similarly there are strong (negative and positive) correlations to various mobility metrics which is to be expected. Since there is likely cross correlation between alcohol and some of the mobility measures (specifically the Google retail and recreation metric, as well as the overall mean restriction level which is based simply on the Government-mandated alert levels), in order to model the effects of these restrictions, it is necessary to identify those with the lowest level of inter-dependence. Within these metrics, it is likely the curfew level (moderately strong negative correlation with excess contact crime), the overall alcohol index (strong negative correlation), and the Google residential metric (strong negative correlation) will satisfy this requirement. There is a very high correlation with the governmental "Alert levels" of 0 to 5 but since these included many different restrictions (including alcohol, tobacco, retail and mobility) and were often adjusted, they are likely not a good measure.
+
+```{r echo=FALSE, error=FALSE, fig.height=8.3, fig.width=8.3, message=FALSE, warnings=FALSE}
+source("build_crime_summary1.r")
+source("google_mobility_.r")
+
+
+##add google mobility to excess contact_crimes
+contact_crimes_excess <- left_join(contact_crimes_excess, 
+                                   filter(google_mobility, 
+                                          iso_3166_2_code == "ZA-Nat")) %>% 
+  filter(!is.na(google_residential))
+
+contact_crimes_excess %>% 
+  GGally::ggpairs(columns = c(4:7,9,10))+
+  labs(title = "\"Excess\" contact crime correlation with alcohol restrictions and Government alert levels",
+       subtitle = "South Africa, February 2020 ~ Jun 2021")
+
+contact_crimes_excess %>% 
+  GGally::ggpairs(columns = c(4,8,17:22))+
+  labs(title = "\"Excess\" contact crime correlation with curfew restrictions and Google mobility measures",
+       subtitle = "South Africa, February 2020 ~ Jun 2021", caption = "Note: Google mobility measures unavailable for January 2020")
+```
+
+## Modelling the impact of alcohol restrictions and mobility levels on reported contact crimes.
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8.3, message=FALSE, warnings=FALSE}
+
+source("build_crime_summary1.r")
+source("google_mobility_.r")
+
+
+##add google mobility to excess contact_crimes
+contact_crimes_excess1 <- left_join(contact_crimes_excess, 
+                                   filter(google_mobility, 
+                                          iso_3166_2_code == "ZA-Nat")) %>% 
+  filter(!is.na(google_residential))
+
+
+model_alco_curfew <- lm(excess ~ alco_index + curfew_index  , data = contact_crimes_excess1)
+
+
+contact_crimes_excess1$predicted_excess <- 
+  predict(model_alco_curfew, newdata = contact_crimes_excess1)
+
+excessvspredict <- contact_crimes_excess1 %>% 
+  select(month_year,excess, predicted_excess) %>% 
+  ggplot(aes(x=month_year))+
+  geom_path(aes(y = excess, colour = "Data"))+
+   geom_path(aes(y= predicted_excess, colour = "Fitted"))+
+  labs(title = "Fitted linear model: February 2020 - June 2021", subtitle = "\"Excess\" reported crime ~ Alcohol restriction index + Curfew index")+
+  xlab("Month")+
+  ylab("\"Excess\" reported crime count")+
+  theme_minimal()
+
+excessvspredict
+
+summary(model_alco_curfew)
+
+
+```
+
+```{r echo=FALSE, error=FALSE, fig.height=6, fig.width=8.3, message=FALSE, warnings=FALSE}
+library(ggiraphExtra)
+source("build_crime_summary1.r")
+source("google_mobility_.r")
+
+
+
+contact_crimes_excess1 <- left_join(contact_crimes_excess, 
+                                   filter(google_mobility, 
+                                          iso_3166_2_code == "ZA-Nat")) %>% 
+  filter(!is.na(google_residential))
+
+model_alco_mobility <- lm(excess ~ alco_index +google_residential  , data = contact_crimes_excess1)
+
+
+contact_crimes_excess1$predicted_excess <- 
+  predict(model_alco_mobility, newdata = contact_crimes_excess1)
+
+excessvspredict <- contact_crimes_excess1 %>% 
+  select(month_year,excess, predicted_excess) %>% 
+  ggplot(aes(x=month_year))+
+  geom_path(aes(y = excess, colour = "Data"))+
+  geom_path(aes(y= predicted_excess, colour = "Fitted"))+
+  labs(title = "Fitted linear model: February 2020 - June 2021", subtitle = "\"Excess\" reported crime ~ Alcohol restriction index + Google residential mobility index")+
+  xlab("Month")+
+  ylab("\"Excess\" reported crime count")+
+  theme_minimal()
+
+excessvspredict
+
+summary(model_alco_mobility)
+
+```
+
+The model fit with alcohol restriction index and curfew restriction index is very good and seems to indicate that alcohol restrictions are a significant cause of reduced contact crime reports. However, there is a real risk that, given the limited number of data points, the linear model may be over-fitted.
+
+Even if this model is correct, it is likely that it will not hold when the July SAPS data is released. In early July there was large scale unrest that occurred during a period that the sale of alcohol was banned.
+
+Note: All of the crime data included in this analysis is from SAPS and is based on crime *reports*. It is possible that during the period of mobility restrictions that fewer crimes were reported despite actually occurring.
