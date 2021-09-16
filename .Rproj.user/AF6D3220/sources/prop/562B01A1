@@ -1,4 +1,7 @@
 {
     "source_window_id": "",
-    "Source": "Source"
+    "Source": "Source",
+    "working_dir": "default",
+    "cursorPosition": "5,17",
+    "scrollLine": "0"
 }

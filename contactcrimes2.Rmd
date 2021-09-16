@@ -3,7 +3,7 @@ title: "Contact Crime Excess"
 author: "Andrew Fraser"
 date: "13/09/2021"
 output:
-  html_document:
+  github_document:
     df_print: paged
   word_document:
     fig_width: 8
